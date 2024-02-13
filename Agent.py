@@ -51,7 +51,7 @@ class Agent:
         imageA_array = np.array(image)
         imageB_array = np.array(image2)
         if(np.array_equal(imageA_array, imageB_array)):
-            return (True, 100)
+            return (True, 100.0)
         
         sim = self.similarity(image, image2)
         if(sim > 99):
@@ -71,8 +71,10 @@ class Agent:
             similarity = self.similarity(method[1], image2)
             # print('rotate', method[0], similarity)
             if(similarity > 70):
-                valid_methods.append(('rotate', method[0]))
-            
+                valid_methods.append(('rotate', method[0], similarity))
+                
+        if(len(valid_methods) > 1):    
+            valid_methods.sort(key=lambda tup: tup[2], reverse=True)
         return valid_methods
 
     def flipAxis2x2(self, image_one_filename, image_two_filename):
@@ -89,12 +91,11 @@ class Agent:
             similarity = self.similarity(method[1], image2)
             # print('flip', method[0], similarity)
             if(similarity > 70):
-                valid_methods.append(('flip', method[0]))
+                valid_methods.append(('flip', method[0], similarity))
         
+        if(len(valid_methods) > 1):    
+            valid_methods.sort(key=lambda tup: tup[2], reverse=True)
         return valid_methods
-    
-    def generate_and_test(self, a_b_methods, a_c_methods, answers):
-        pass
     
     def generate_test_rotation2x2(self, imageC, rotationAmount, answers):
         rotated_image2 = imageC.transpose(rotationAmount)
@@ -115,6 +116,10 @@ class Agent:
             if(np.array_equal(flip_arr, image_answer)):
                 return index + 1
         return None
+    
+    def generate_and_test(self, a_b_methods, a_c_methods, answers):
+        # print('generating', a_b_methods[0], a_c_methods[0], a_b_methods, a_c_methods)
+        pass
     
     def Solve(self, problem):
         # Primary method for solving incoming Raven's Progressive Matrices.
@@ -173,15 +178,15 @@ class Agent:
                         return index + 1
                     
             elif(isSameHorinzontally[0]):
-                A_B_methods.append(('same', isSameHorinzontally[1]))
+                A_B_methods.append(('same', 'h', isSameHorinzontally[1]))
             elif(isSameVertically[0]):
-                A_C_methods.append(('same', isSameVertically[1]))
+                A_C_methods.append(('same', 'v', isSameVertically[1]))
             
             rotation_methodsA_B = self.rotate_check2x2(figures[A].visualFilename, figures[B].visualFilename)
             rotation_methodsA_C = self.rotate_check2x2(figures[A].visualFilename, figures[C].visualFilename)
-            print('rotation_methods', rotation_methodsA_B, rotation_methodsA_C)
-            A_B_methods.append(rotation_methodsA_B)
-            A_C_methods.append(rotation_methodsA_C)
+            # print('rotation_methods', rotation_methodsA_B, rotation_methodsA_C)
+            A_B_methods.extend(rotation_methodsA_B)
+            A_C_methods.extend(rotation_methodsA_C)
             # if(rotation[0]):
             #     ans = self.generate_test_rotation2x2(QuestionImageC, rotation[1], answers)
             #     if(ans is not None):
@@ -189,15 +194,19 @@ class Agent:
             #         return ans
             flip_methodsA_B = self.flipAxis2x2(figures[A].visualFilename, figures[B].visualFilename)
             flip_methodsA_C = self.flipAxis2x2(figures[A].visualFilename, figures[B].visualFilename)
-            print('flip_methods', flip_methodsA_B, flip_methodsA_C)
-            A_B_methods.append(flip_methodsA_B)
-            A_C_methods.append(flip_methodsA_C)
+            # print('flip_methods', flip_methodsA_B, flip_methodsA_C)
+            A_B_methods.extend(flip_methodsA_B)
+            A_C_methods.extend(flip_methodsA_C)
             # if(flip[0]):
             #     ans = self.generate_flip2x2(figures[C].visualFilename, flip[1], answer_filenames)
             #     if(ans is not None):
             #             return ans
             
             # Generate and Test
+            if(len(A_B_methods) > 1):    
+                A_B_methods.sort(key=lambda tup: tup[2], reverse=True)
+            if(len(A_C_methods) > 1):    
+                A_C_methods.sort(key=lambda tup: tup[2], reverse=True)
             answer_index = self.generate_and_test(A_B_methods, A_C_methods, answers)
             
             # Setup Image Class for each image
