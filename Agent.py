@@ -118,8 +118,18 @@ class Agent:
         return None
     
     def generate_and_test(self, a_b_methods, a_c_methods, answers):
-        # print('generating', a_b_methods[0], a_c_methods[0], a_b_methods, a_c_methods)
-        pass
+        a_b_len = len(a_b_methods)
+        a_c_len = len(a_c_methods)
+        if(a_b_len > 0 and a_c_len > 0):
+            
+        elif(a_b_len > 0):
+            method = a_b_methods[0]
+            id
+                
+        elif(a_c_len > 0):
+            
+        else:
+            return 1
     
     def Solve(self, problem):
         # Primary method for solving incoming Raven's Progressive Matrices.
@@ -208,7 +218,9 @@ class Agent:
             if(len(A_C_methods) > 1):    
                 A_C_methods.sort(key=lambda tup: tup[2], reverse=True)
             answer_index = self.generate_and_test(A_B_methods, A_C_methods, answers)
-            
+            print(answer_index)
+            return answer_index
+        
             # Setup Image Class for each image
             # ravenImageA = RavenImage(figures[A].visualFilename)
             
