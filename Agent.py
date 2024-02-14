@@ -27,6 +27,9 @@ figure_index_5 = '5'
 figure_index_6 = '6'
 figure_index_7 = '7'
 figure_index_8 = '8'
+ROTATE = 'rotate'
+FLIP = 'flip'
+SAME = 'same'
 
 class Agent:
     def __init__(self):
@@ -54,7 +57,7 @@ class Agent:
             return (True, 100.0)
         
         sim = self.similarity(image, image2)
-        if(sim > 99):
+        if(sim > 97):
             return (True, sim)
         return (False, sim)       
     
@@ -64,14 +67,14 @@ class Agent:
         rotated_image90 = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
         rotated_image180 = cv2.rotate(image, cv2.ROTATE_180)
         rotated_image270 = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        
+ 
         valid_methods = []
         options = [(cv2.ROTATE_90_CLOCKWISE, rotated_image90), (cv2.ROTATE_180, rotated_image180), (cv2.ROTATE_90_COUNTERCLOCKWISE, rotated_image270)]
         for method in options:
             similarity = self.similarity(method[1], image2)
             # print('rotate', method[0], similarity)
-            if(similarity > 70):
-                valid_methods.append(('rotate', method[0], similarity))
+            if(similarity > 80):
+                valid_methods.append((ROTATE, method[0], similarity))
                 
         if(len(valid_methods) > 1):    
             valid_methods.sort(key=lambda tup: tup[2], reverse=True)
@@ -89,48 +92,130 @@ class Agent:
         valid_methods = []
         for method in options:
             similarity = self.similarity(method[1], image2)
-            # print('flip', method[0], similarity)
-            if(similarity > 70):
-                valid_methods.append(('flip', method[0], similarity))
+
+            if(similarity > 80):
+                valid_methods.append((FLIP, method[0], similarity))
         
         if(len(valid_methods) > 1):    
             valid_methods.sort(key=lambda tup: tup[2], reverse=True)
         return valid_methods
     
-    def generate_test_rotation2x2(self, imageC, rotationAmount, answers):
-        rotated_image2 = imageC.transpose(rotationAmount)
-        rotated_image2_array = np.array(rotated_image2)
-        for index,answer in enumerate(answers):
-            image_answer = np.array(answer)
-            if(np.array_equal(rotated_image2_array, image_answer)):
-                return index + 1
-
+    # Testing methods
     
-    def generate_flip2x2(self, imageC, flipDirection, answers):
-        image = cv2.imread(imageC)
+    def generate_rotation2x2(self, rotationAmount, answers, image_for_generation=None, image_object=None):
+        image = None
+        if(image_for_generation is None):
+            image = image_object
+        else:
+            image = cv2.imread(image_for_generation)
+
+        rotated_image = cv2.rotate(image, rotationAmount)
+        generated_answers = []
+        for index,answer in enumerate(answers):
+            ans_image = cv2.imread(answer)
+            similarity = self.similarity(rotated_image, ans_image)
+            generated_answers.append(GeneratedAnswer(similarity, ROTATE, answerIndex= index + 1))
+        return (rotated_image, generated_answers)
+    
+    def generate_flip2x2(self, flipDirection, answers, image_for_generation=None, image_object=None):
+        image = None
+        if(image_for_generation is None):
+            image = image_object
+        else:
+            image = cv2.imread(image_for_generation)
+
         flip = cv2.flip(image, flipCode=flipDirection)
-        flip_arr = np.array(flip)
+        generated_answers = []
         for index,answer in enumerate(answers):
             answerImage = cv2.imread(answer)
-            image_answer = np.array(answerImage)
-            if(np.array_equal(flip_arr, image_answer)):
-                return index + 1
-        return None
+            similarity = self.similarity(flip, answerImage)
+            generated_answers.append(GeneratedAnswer(similarity=similarity, method=FLIP, answerIndex=index + 1))
+        return (flip, generated_answers)
     
-    def generate_and_test(self, a_b_methods, a_c_methods, answers):
+    def generate_same2x2(self, answers, image_for_generation=None, image_object=None):
+        image = None
+        if(image_for_generation is None):
+            image = image_object
+        else:
+            image = cv2.imread(image_for_generation)
+
+        image_array = np.array(image)
+        generated_answers = []
+        for index,answer in enumerate(answers):
+                answerImage = cv2.imread(answer)
+                image_answer = np.array(answerImage)
+                if(np.array_equal(image_answer, image_array)):
+                    generated_answers.append(GeneratedAnswer(similarity=100.0, method=SAME, answerIndex=index + 1))
+                sim = self.similarity(image, answerImage)
+                generated_answers.append(GeneratedAnswer(similarity= sim, answerIndex= index + 1, method=SAME))
+        return (image, generated_answers)
+    
+    def generate_images(self, method, answers, image_filename=None, imageObject=None):
+        print('---generating answer images----', method)
+        method_type = method[0]
+        method_amount = method[1]
+        if(method_type == SAME):
+            return self.generate_same2x2(answers, image_for_generation=image_filename, image_object=imageObject)
+        if(method_type == ROTATE):
+            return self.generate_rotation2x2(image_for_generation=image_filename, image_object=imageObject, answers=answers, rotationAmount=method_amount)
+        if(method_type == FLIP):
+            return self.generate_flip2x2(image_for_generation=image_filename, image_object=imageObject, flipDirection=method_amount, answers=answers)
+
+    def generate_and_test(self, a_b_methods, a_c_methods, answers, imageB, imageC):
         a_b_len = len(a_b_methods)
         a_c_len = len(a_c_methods)
         if(a_b_len > 0 and a_c_len > 0):
-            
-        elif(a_b_len > 0):
-            method = a_b_methods[0]
-            id
+            # transform both
+            print('---has both row and column transformation methods----')
+            ans_row_list = []
+            # row
+            for method in a_b_methods:
+                images = self.generate_images(method=method, image_filename=imageC, answers=answers)
+                ans_row_list.extend(images[1])
+            # column
+            ans_column_list = []           
+            for method_column in a_b_methods:
+                images_column = self.generate_images(method=method_column, image_filename=imageB, answers=answers)
+                ans_column_list.extend(images_column[1])
+
+            if(len(ans_column_list) > 1):    
+                ans_column_list.sort(key=lambda ans: ans.similarity, reverse=True)
                 
-        elif(a_c_len > 0):
+            if(len(ans_row_list) > 1):    
+                ans_row_list.sort(key=lambda ans: ans.similarity, reverse=True)
+                
+            if(ans_column_list[0].answerIndex == ans_row_list[0].answerIndex):
+                return ans_column_list[0].answerIndex
             
-        else:
-            return 1
-    
+            return ans_row_list[0].answerIndex
+        elif(a_b_len > 0):
+            # transform image C
+            print('---has only row transformation method----')
+            ans_list = []
+            for method in a_b_methods:
+                images = self.generate_images(method=method, image_filename=imageC, answers=answers)
+                ans_list.extend(images[1])
+            if(len(ans_list) > 1):    
+                ans_list.sort(key=lambda ans: ans.similarity, reverse=True)
+                # for i in ans_list:
+                #     print(i.method, i.similarity, i.answerIndex)
+                return ans_list[0].answerIndex
+        
+        elif(a_c_len > 0):
+            # transform image B
+            print('---has only column transformation method----')
+            ans_list = []
+            for method in a_c_methods:
+                images = self.generate_images(method=method, image_filename=imageB, answers=answers)
+                ans_list.extend(images[1])
+
+            if(len(ans_list) > 1):    
+                ans_list.sort(key=lambda ans: ans.similarity, reverse=True)
+                # for i in ans_list:
+                #     print(i.method, i.similarity, i.answerIndex)
+                return ans_list[0].answerIndex
+
+        return 1
     def Solve(self, problem):
         # Primary method for solving incoming Raven's Progressive Matrices.
 
@@ -188,41 +273,34 @@ class Agent:
                         return index + 1
                     
             elif(isSameHorinzontally[0]):
-                A_B_methods.append(('same', 'h', isSameHorinzontally[1]))
+                A_B_methods.append((SAME, 'h', isSameHorinzontally[1]))
             elif(isSameVertically[0]):
-                A_C_methods.append(('same', 'v', isSameVertically[1]))
+                A_C_methods.append((SAME, 'v', isSameVertically[1]))
             
+            # check rotation
             rotation_methodsA_B = self.rotate_check2x2(figures[A].visualFilename, figures[B].visualFilename)
             rotation_methodsA_C = self.rotate_check2x2(figures[A].visualFilename, figures[C].visualFilename)
-            # print('rotation_methods', rotation_methodsA_B, rotation_methodsA_C)
             A_B_methods.extend(rotation_methodsA_B)
             A_C_methods.extend(rotation_methodsA_C)
-            # if(rotation[0]):
-            #     ans = self.generate_test_rotation2x2(QuestionImageC, rotation[1], answers)
-            #     if(ans is not None):
-            #         print('answer_found', ans)
-            #         return ans
+
+            # check rotation
             flip_methodsA_B = self.flipAxis2x2(figures[A].visualFilename, figures[B].visualFilename)
-            flip_methodsA_C = self.flipAxis2x2(figures[A].visualFilename, figures[B].visualFilename)
-            # print('flip_methods', flip_methodsA_B, flip_methodsA_C)
+            flip_methodsA_C = self.flipAxis2x2(figures[A].visualFilename, figures[C].visualFilename)
             A_B_methods.extend(flip_methodsA_B)
             A_C_methods.extend(flip_methodsA_C)
-            # if(flip[0]):
-            #     ans = self.generate_flip2x2(figures[C].visualFilename, flip[1], answer_filenames)
-            #     if(ans is not None):
-            #             return ans
             
             # Generate and Test
             if(len(A_B_methods) > 1):    
                 A_B_methods.sort(key=lambda tup: tup[2], reverse=True)
             if(len(A_C_methods) > 1):    
                 A_C_methods.sort(key=lambda tup: tup[2], reverse=True)
-            answer_index = self.generate_and_test(A_B_methods, A_C_methods, answers)
-            print(answer_index)
-            return answer_index
-        
+            answer_index = self.generate_and_test(A_B_methods, A_C_methods, answers, figures[B].visualFilename, figures[C].visualFilename)
+            print('answer_found', answer_index)
+
             # Setup Image Class for each image
             # ravenImageA = RavenImage(figures[A].visualFilename)
+            return answer_index
+        
             
         else: 
             # 3x3
@@ -250,6 +328,12 @@ class Agent:
         return 1
     
     
+class GeneratedAnswer:
+    def __init__(self, similarity, method, answerIndex):
+        self.similarity = similarity
+        self.method = method
+        self.answerIndex = answerIndex
+        
 
 class RavenImage:
     def __init__(self, filename):
@@ -278,6 +362,8 @@ class RavenImage:
                 i = 1
                 continue
         
+            if cv2.contourArea(contour) > 0:
+                print('filled')
             # cv2.approxPloyDP() function to approximate the shape 
             approx = cv2.approxPolyDP( 
                 contour, 0.01 * cv2.arcLength(contour, True), True) 
@@ -325,6 +411,3 @@ class Shape:
         self.y = y
         self.shape_type = shape_type
         
-    
-    
-    
