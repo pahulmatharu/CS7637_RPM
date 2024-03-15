@@ -252,6 +252,11 @@ class Agent:
                 return ans_list[0].answerIndex
 
         return 1
+    
+    
+    
+    
+    
     def Solve(self, problem):
         # Primary method for solving incoming Raven's Progressive Matrices.
 

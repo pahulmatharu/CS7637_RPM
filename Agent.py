@@ -1,3 +1,11 @@
+
+
+
+
+
+
+
+
 # pylint: disable=C0200,C0116,C0303,C0325,C0103,C0115
 
 # Allowable libraries:
@@ -47,211 +55,53 @@ class Agent:
     def similarity(self, image, template):
         gImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gTemplate = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        return (cv2.matchTemplate(gImage, gTemplate, cv2.TM_CCOEFF_NORMED).max()) * 100
+        return (cv2.matchTemplate(gImage, gTemplate, cv2.TM_CCOEFF_NORMED).max()) * 100  
     
-    def full_img_fill(self, filename, filename_to_compare):
-        img = cv2.imread(filename) 
-        img_template = cv2.imread(filename_to_compare) 
-        _, im_th = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY_INV)
-        im_floodfill = im_th.copy()
-        h, w = im_th.shape[:2]
-        mask = np.zeros((h+2, w+2), np.uint8)
-        cv2.floodFill(im_floodfill, mask, (0,0), (255,255,255))
-        sim = self.similarity(im_floodfill, img_template)
-        if(sim > 94):
-            return (True, sim)
-        return (False, None)
+    def denoise_image(self, image_filename):
+        image = cv2.imread(image_filename)
+        image=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+        se=cv2.getStructuringElement(cv2.MORPH_RECT , (8,8))
+        bg=cv2.morphologyEx(image, cv2.MORPH_DILATE, se)
+        out_gray=cv2.divide(image, bg, scale=255)
+        out_binary=cv2.threshold(out_gray, 0, 255, cv2.THRESH_OTSU )[1] 
+        return out_binary
     
-    def IsSame2x2(self, image_one_filname, image_two_filname):
-        image = cv2.imread(image_one_filname)
-        image2 = cv2.imread(image_two_filname)
-        imageA_array = np.array(image)
-        imageB_array = np.array(image2)
-        if(np.array_equal(imageA_array, imageB_array)):
-            return (True, 100.0)
+    def connected_components(self, image):
+        # because connected components expect white on black, we need to reverse the image
+        inverse = cv2.bitwise_not(image)
         
-        sim = self.similarity(image, image2)
-        if(sim > 97):
-            return (True, sim)
-        return (False, sim)       
-    
-    def rotate_check2x2(self, image_one_filname, image_two_filname):
-        image = cv2.imread(image_one_filname)
-        image2 = cv2.imread(image_two_filname)
-        rotated_image90 = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
-        rotated_image180 = cv2.rotate(image, cv2.ROTATE_180)
-        rotated_image270 = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
- 
-        valid_methods = []
-        options = [(cv2.ROTATE_90_CLOCKWISE, rotated_image90), (cv2.ROTATE_180, rotated_image180), (cv2.ROTATE_90_COUNTERCLOCKWISE, rotated_image270)]
-        for method in options:
-            similarity = self.similarity(method[1], image2)
-            # print('rotate', method[0], similarity)
-            if(similarity > 80):
-                valid_methods.append((ROTATE, method[0], similarity))
-                
-        if(len(valid_methods) > 1):    
-            valid_methods.sort(key=lambda tup: tup[2], reverse=True)
-        return valid_methods
-
-    def flipAxis2x2(self, image_one_filename, image_two_filename):
-        image2 = cv2.imread(image_two_filename)
-        image = cv2.imread(image_one_filename)
+        ret, thresh = cv2.threshold(inverse,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        # You need to choose 4 or 8 for connectivity type
+        connectivity = 4  
+        # Perform the operation
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, connectivity, cv2.CV_32S)
         
-        horizontal_flip = cv2.flip(image, 1)
-        vertical_flip = cv2.flip(image, 0)
-        both_axis_flip = cv2.flip(image, -1)
-        options = [(1, horizontal_flip), (0, vertical_flip), (-1, both_axis_flip)]
-
-        valid_methods = []
-        for method in options:
-            similarity = self.similarity(method[1], image2)
-
-            if(similarity > 80):
-                valid_methods.append((FLIP, method[0], similarity))
+        # Shape count: num_labels variable will contain the total number of shapes in the image, including the background. So subtract 1 
+        shape_count = num_labels - 1
+        for i in range(1, num_labels):
+            x, y, w, h, area = stats[i]
+            print("Shape {}:".format(i))
+            print("  Left: {}".format(x))
+            print("  Top: {}".format(y))
+            print("  Width: {}".format(w))
+            print("  Height: {}".format(h))
+            print("  Area: {}".format(area))
         
-        if(len(valid_methods) > 1):    
-            valid_methods.sort(key=lambda tup: tup[2], reverse=True)
-        return valid_methods
+        label_hue = np.uint8(179*labels/np.max(labels))
+        blank_ch = 255*np.ones_like(label_hue)
+        labeled_img = cv2.merge([label_hue, blank_ch, blank_ch])
+
+        # cvt to BGR for display
+        labeled_img = cv2.cvtColor(labeled_img, cv2.COLOR_HSV2BGR)
+
+        # set bg label to black
+        labeled_img[label_hue==0] = 0
+
+        cv2.imshow('labeled.png', labeled_img)
+        cv2.waitKey()
+            # cv2.destroyAllWindows()
+        print(num_labels, stats, centroids)
     
-    # Testing methods
-    
-    def generate_rotation2x2(self, rotationAmount, answers, image_for_generation=None, image_object=None):
-        image = None
-        if(image_for_generation is None):
-            image = image_object
-        else:
-            image = cv2.imread(image_for_generation)
-
-        rotated_image = cv2.rotate(image, rotationAmount)
-        generated_answers = []
-        for index,answer in enumerate(answers):
-            ans_image = cv2.imread(answer)
-            similarity = self.similarity(rotated_image, ans_image)
-            generated_answers.append(GeneratedAnswer(similarity, ROTATE, answerIndex= index + 1))
-        return (rotated_image, generated_answers)
-    
-    def generate_flip2x2(self, flipDirection, answers, image_for_generation=None, image_object=None):
-        image = None
-        if(image_for_generation is None):
-            image = image_object
-        else:
-            image = cv2.imread(image_for_generation)
-
-        flip = cv2.flip(image, flipCode=flipDirection)
-        generated_answers = []
-        for index,answer in enumerate(answers):
-            answerImage = cv2.imread(answer)
-            similarity = self.similarity(flip, answerImage)
-            generated_answers.append(GeneratedAnswer(similarity=similarity, method=FLIP, answerIndex=index + 1))
-        return (flip, generated_answers)
-    
-    def generate_same2x2(self, answers, image_for_generation=None, image_object=None):
-        image = None
-        if(image_for_generation is None):
-            image = image_object
-        else:
-            image = cv2.imread(image_for_generation)
-
-        image_array = np.array(image)
-        generated_answers = []
-        for index,answer in enumerate(answers):
-                answerImage = cv2.imread(answer)
-                image_answer = np.array(answerImage)
-                if(np.array_equal(image_answer, image_array)):
-                    generated_answers.append(GeneratedAnswer(similarity=100.0, method=SAME, answerIndex=index + 1))
-                sim = self.similarity(image, answerImage)
-                generated_answers.append(GeneratedAnswer(similarity= sim, answerIndex= index + 1, method=SAME))
-        return (image, generated_answers)
-    
-    def generate_fill2x2(self, answers, image_for_generation=None, image_object=None):
-        image = None
-        if(image_for_generation is None):
-            image = image_object
-        else:
-            image = cv2.imread(image_for_generation)
- 
-        _, im_th = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY_INV)
-        im_floodfill = im_th.copy()
-        h, w = im_th.shape[:2]
-        mask = np.zeros((h+2, w+2), np.uint8)
-        cv2.floodFill(im_floodfill, mask, (0,0), (255,255,255))
-        
-        generated_answers = []
-        for index,answer in enumerate(answers):
-                answerImage = cv2.imread(answer)
-                sim = self.similarity(im_floodfill, answerImage)
-                generated_answers.append(GeneratedAnswer(similarity= sim, answerIndex= index + 1, method=FILL_WHOLE_IMG))
-        return (image, generated_answers)
-    
-    def generate_images(self, method, answers, image_filename=None, imageObject=None):
-        # print('---generating answer images----', method)
-        method_type = method[0]
-        method_amount = method[1]
-        if(method_type == SAME):
-            return self.generate_same2x2(answers, image_for_generation=image_filename, image_object=imageObject)
-        if(method_type == ROTATE):
-            return self.generate_rotation2x2(image_for_generation=image_filename, image_object=imageObject, answers=answers, rotationAmount=method_amount)
-        if(method_type == FLIP):
-            return self.generate_flip2x2(image_for_generation=image_filename, image_object=imageObject, flipDirection=method_amount, answers=answers)
-        if(method_type == FILL_WHOLE_IMG):
-            return self.generate_fill2x2(image_for_generation=image_filename, image_object=imageObject, answers=answers)
-
-    def generate_and_test(self, a_b_methods, a_c_methods, answers, imageB, imageC):
-        a_b_len = len(a_b_methods)
-        a_c_len = len(a_c_methods)
-        if(a_b_len > 0 and a_c_len > 0):
-            # transform both
-            print('---has both row and column transformation methods----')
-            ans_row_list = []
-            # row
-            for method in a_b_methods:
-                images = self.generate_images(method=method, image_filename=imageC, answers=answers)
-                ans_row_list.extend(images[1])
-            # column
-            ans_column_list = []           
-            for method_column in a_c_methods:
-                images_column = self.generate_images(method=method_column, image_filename=imageB, answers=answers)
-                ans_column_list.extend(images_column[1])
-
-            if(len(ans_column_list) > 1):    
-                ans_column_list.sort(key=lambda ans: ans.similarity, reverse=True)
-                
-            if(len(ans_row_list) > 1):    
-                ans_row_list.sort(key=lambda ans: ans.similarity, reverse=True)
-                
-            if(ans_column_list[0].answerIndex == ans_row_list[0].answerIndex):
-                return ans_column_list[0].answerIndex
-            
-            return ans_row_list[0].answerIndex
-        elif(a_b_len > 0):
-            # transform image C
-            print('---has only row transformation method----')
-            ans_list = []
-            for method in a_b_methods:
-                images = self.generate_images(method=method, image_filename=imageC, answers=answers)
-                ans_list.extend(images[1])
-            if(len(ans_list) > 1):    
-                ans_list.sort(key=lambda ans: ans.similarity, reverse=True)
-                for i in ans_list:
-                    print(i.method, i.similarity, i.answerIndex)
-                return ans_list[0].answerIndex
-        
-        elif(a_c_len > 0):
-            # transform image B
-            print('---has only column transformation method----')
-            ans_list = []
-            for method in a_c_methods:
-                images = self.generate_images(method=method, image_filename=imageB, answers=answers)
-                ans_list.extend(images[1])
-
-            if(len(ans_list) > 1):    
-                ans_list.sort(key=lambda ans: ans.similarity, reverse=True)
-                for i in ans_list:
-                    print(i.method, i.similarity, i.answerIndex)
-                return ans_list[0].answerIndex
-
-        return 1
     def Solve(self, problem):
         # Primary method for solving incoming Raven's Progressive Matrices.
 
@@ -281,93 +131,37 @@ class Agent:
         print('Beginning problem' + name, problemType)
         # First I need to figure out what type of matrix i will need to build
         is2x2 = problemType == self.TwoByTwo
-        if(is2x2):
-            # images
-            # figures[A].visualFilename
-            # figures[B].visualFilename
-            # figures[C].visualFilename
-            # Answers
-            answers = [figures[figure_index_1].visualFilename, 
-                                figures[figure_index_2].visualFilename, 
-                                figures[figure_index_3].visualFilename, 
-                                figures[figure_index_4].visualFilename, 
-                                figures[figure_index_5].visualFilename, 
-                                figures[figure_index_6].visualFilename]
-            
-            # see if the relationship between A and B, A and C is a mirror.
-            A_B_methods = []
-            A_C_methods = []
-            isSameHorinzontally = self.IsSame2x2(figures[A].visualFilename, figures[B].visualFilename)
-            isSameVertically = self.IsSame2x2(figures[A].visualFilename, figures[C].visualFilename)
-            if(isSameHorinzontally[0] and isSameVertically[0]):
-                # most likely since both row and column are mirrors, the answer is a mirror.
-                for index, answer in enumerate(answers):
-                    isSame = self.IsSame2x2(figures[C].visualFilename, answer)
-                    if(isSame[0]):
-                        print('answer_found', index + 1)
-                        return index + 1
-                    
-            elif(isSameHorinzontally[0]):
-                A_B_methods.append((SAME, 'h', isSameHorinzontally[1]))
-            elif(isSameVertically[0]):
-                A_C_methods.append((SAME, 'v', isSameVertically[1]))
-            
-            # check rotation
-            rotation_methodsA_B = self.rotate_check2x2(figures[A].visualFilename, figures[B].visualFilename)
-            rotation_methodsA_C = self.rotate_check2x2(figures[A].visualFilename, figures[C].visualFilename)
-            A_B_methods.extend(rotation_methodsA_B)
-            A_C_methods.extend(rotation_methodsA_C)
-
-            # check flip
-            flip_methodsA_B = self.flipAxis2x2(figures[A].visualFilename, figures[B].visualFilename)
-            flip_methodsA_C = self.flipAxis2x2(figures[A].visualFilename, figures[C].visualFilename)
-            A_B_methods.extend(flip_methodsA_B)
-            A_C_methods.extend(flip_methodsA_C)
-            
-            # check if fill whole image works
-            img_fill_row = self.full_img_fill(figures[A].visualFilename, figures[B].visualFilename)
-            if(img_fill_row[0]):
-                A_B_methods.append((FILL_WHOLE_IMG, 'h', img_fill_row[1]))
-            img_fill_col = self.full_img_fill(figures[A].visualFilename, figures[C].visualFilename)
-            if(img_fill_col[0]):
-                A_C_methods.append((FILL_WHOLE_IMG, 'v', img_fill_col[1]))
-                
-            # check dark pixel count difference
-            
-            # Generate and Test
-            if(len(A_B_methods) > 1):    
-                A_B_methods.sort(key=lambda tup: tup[2], reverse=True)
-            if(len(A_C_methods) > 1):    
-                A_C_methods.sort(key=lambda tup: tup[2], reverse=True)
-            answer_index = self.generate_and_test(A_B_methods, A_C_methods, answers, figures[B].visualFilename, figures[C].visualFilename)
-            print('answwe', answer_index)
-
-            return answer_index
-        
-            
-        else: 
+        if(not is2x2):
             # 3x3
             # Question
-            ImageA = Image.open(figures[A].visualFilename)
-            ImageB = Image.open(figures[B].visualFilename)
-            ImageC = Image.open(figures[C].visualFilename)
-            ImageD = Image.open(figures[D].visualFilename)
-            ImageE = Image.open(figures[E].visualFilename)
-            ImageF = Image.open(figures[F].visualFilename)
-            ImageG = Image.open(figures[G].visualFilename)
-            ImageH = Image.open(figures[H].visualFilename)
+            ImageA_filename = figures[A].visualFilename
+            ImageB_filename = figures[B].visualFilename
+            ImageC_filename = figures[C].visualFilename
+            ImageD_filename = figures[D].visualFilename
+            ImageE_filename = figures[E].visualFilename
+            ImageF_filename = figures[F].visualFilename
+            ImageG_filename = figures[G].visualFilename
+            ImageH_filename = figures[H].visualFilename
 
             #Answers
-            Image1 = Image.open(figures[figure_index_1].visualFilename)
-            Image2 = Image.open(figures[figure_index_2].visualFilename)
-            Image3 = Image.open(figures[figure_index_3].visualFilename)
-            Image4 = Image.open(figures[figure_index_4].visualFilename)
-            Image5 = Image.open(figures[figure_index_5].visualFilename)
-            Image6 = Image.open(figures[figure_index_6].visualFilename)
-            Image7 = Image.open(figures[figure_index_7].visualFilename)
-            Image8 = Image.open(figures[figure_index_8].visualFilename)
+            answerImg_filename1 = figures[figure_index_1].visualFilename
+            answerImg_filename2 = figures[figure_index_2].visualFilename
+            answerImg_filename3 = figures[figure_index_3].visualFilename
+            answerImg_filename4 = figures[figure_index_4].visualFilename
+            answerImg_filename5 = figures[figure_index_5].visualFilename
+            answerImg_filename6 = figures[figure_index_6].visualFilename
+            answerImg_filename7 = figures[figure_index_7].visualFilename
+            answerImg_filename8 = figures[figure_index_8].visualFilename
+            
+            image = self.denoise_image(ImageA_filename)
+            self.connected_components(image)
+            imageD = self.denoise_image(ImageD_filename)
+            self.connected_components(imageD)
+            imageG = self.denoise_image(ImageG_filename)
+            self.connected_components(imageG)
+            # methods
 
-        # Placeholder: Skip all problems for now.
+
         return 1
     
     
